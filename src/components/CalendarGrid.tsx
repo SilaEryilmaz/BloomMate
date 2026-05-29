@@ -36,7 +36,7 @@ export function CalendarGrid({ month, periodDates, predictedDates, logs }: Props
       <View style={styles.grid}>
         {days.map((day) => {
           const key = format(day, "yyyy-MM-dd");
-          const hasLog = logs.some((log) => log.date === key && (log.symptoms.length > 0 || log.flow !== "none"));
+          const hasLog = logs.some((log) => log.date === key && (log.symptoms.length > 0 || log.flow !== "none" || log.notes.trim().length > 0));
           const isPeriod = periodDates.has(key);
           const isPredicted = predictedDates.has(key);
           const muted = !isSameMonth(day, month);

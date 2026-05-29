@@ -9,7 +9,6 @@ import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { CalendarScreen } from "./src/screens/CalendarScreen";
-import { HistoryScreen } from "./src/screens/HistoryScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { TodayScreen } from "./src/screens/TodayScreen";
 import { OnboardingScreen } from "./src/screens/OnboardingScreen";
@@ -18,10 +17,9 @@ import { TrackerData } from "./src/types";
 import { colors } from "./src/theme";
 
 export type RootTabParamList = {
-  Today: undefined;
+  Home: undefined;
   Calendar: undefined;
-  History: undefined;
-  Settings: undefined;
+  Profile: undefined;
 };
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
@@ -74,19 +72,17 @@ export default function App() {
             tabBarLabelStyle: styles.tabLabel,
             tabBarIcon: ({ color, size }) => {
               const icons: Record<keyof RootTabParamList, keyof typeof Ionicons.glyphMap> = {
-                Today: "sparkles-outline",
+                Home: "home",
                 Calendar: "calendar-outline",
-                History: "analytics-outline",
-                Settings: "shield-checkmark-outline"
+                Profile: "person"
               };
               return <Ionicons name={icons[route.name]} color={color} size={size} />;
             }
           })}
         >
-          <Tab.Screen name="Today">{() => <TodayScreen {...screenProps} />}</Tab.Screen>
+          <Tab.Screen name="Home">{() => <TodayScreen {...screenProps} />}</Tab.Screen>
           <Tab.Screen name="Calendar">{() => <CalendarScreen {...screenProps} />}</Tab.Screen>
-          <Tab.Screen name="History">{() => <HistoryScreen {...screenProps} />}</Tab.Screen>
-          <Tab.Screen name="Settings">{() => <SettingsScreen {...screenProps} />}</Tab.Screen>
+          <Tab.Screen name="Profile">{() => <SettingsScreen {...screenProps} />}</Tab.Screen>
         </Tab.Navigator>
       </NavigationContainer>
       )}
@@ -102,11 +98,12 @@ const styles = StyleSheet.create({
     justifyContent: "center"
   },
   tabBar: {
-    backgroundColor: colors.surface,
+    backgroundColor: "#F7F1EC",
     borderTopColor: colors.line,
-    height: 78,
-    paddingBottom: 18,
-    paddingTop: 8
+    borderTopWidth: 1,
+    height: 82,
+    paddingBottom: 16,
+    paddingTop: 10
   },
   tabLabel: {
     fontSize: 12,

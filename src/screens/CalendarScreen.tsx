@@ -1,4 +1,4 @@
-import { addMonths, format } from "date-fns";
+import { addMonths, format, isSameMonth, parseISO } from "date-fns";
 import { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { CalendarGrid } from "../components/CalendarGrid";
 import { Card } from "../components/Card";
 import { PrimaryButton } from "../components/PrimaryButton";
+import { TopBar } from "../components/TopBar";
 import { colors, spacing } from "../theme";
 import { ScreenProps } from "../types";
 import { formatFriendlyDate, getNextPeriodStart, getPeriodDateKeys, getPredictedDateKeys } from "../utils/cycle";
@@ -14,14 +15,19 @@ export function CalendarScreen({ data }: ScreenProps) {
   const [month, setMonth] = useState(new Date());
   const periodDates = useMemo(() => getPeriodDateKeys(data.cycles, data.settings), [data.cycles, data.settings]);
   const predictedDates = useMemo(() => getPredictedDateKeys(data.cycles, data.settings), [data.cycles, data.settings]);
+  const monthLogs = useMemo(
+    () => data.logs.filter((log) => isSameMonth(parseISO(log.date), month) && (log.flow !== "none" || log.symptoms.length > 0 || log.notes.trim().length > 0)),
+    [data.logs, month]
+  );
   const nextPeriod = getNextPeriodStart(data.cycles, data.settings);
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content}>
+        <TopBar title="Calendar" showBack />
         <View style={styles.header}>
           <View>
-            <Text style={styles.title}>Calendar</Text>
+            <Text style={styles.title}>Cycle calendar</Text>
             <Text style={styles.subtitle}>{nextPeriod ? `Next bloom: ${formatFriendlyDate(nextPeriod)}` : "Predictions will appear after setup."}</Text>
           </View>
         </View>
@@ -37,6 +43,25 @@ export function CalendarScreen({ data }: ScreenProps) {
           <Legend color={colors.coral} label="Logged period" />
           <Legend color={colors.butter} label="Prediction" />
           <Legend color={colors.berry} label="Daily log" />
+        </Card>
+        <Card>
+          <Text style={styles.sectionTitle}>Logs this month</Text>
+          {monthLogs.length === 0 ? (
+            <Text style={styles.emptyText}>Saved notes, symptoms, and flow will appear here.</Text>
+          ) : (
+            monthLogs.map((log) => (
+              <View key={log.date} style={styles.logRow}>
+                <Text style={styles.logDate}>{format(parseISO(log.date), "MMM d")}</Text>
+                <View style={styles.logContent}>
+                  <Text style={styles.logMeta}>
+                    {log.flow !== "none" ? `${log.flow} flow` : "Daily note"}
+                    {log.symptoms.length > 0 ? ` · ${log.symptoms.join(", ")}` : ""}
+                  </Text>
+                  {log.notes.trim().length > 0 ? <Text style={styles.logNote}>{log.notes}</Text> : null}
+                </View>
+              </View>
+            ))
+          )}
         </Card>
       </ScrollView>
     </SafeAreaView>
@@ -67,6 +92,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between"
+  },
+  emptyText: {
+    color: colors.inkMuted,
+    fontSize: 15,
+    fontWeight: "700",
+    lineHeight: 22
   },
   legendCard: {
     alignItems: "center",
@@ -101,9 +132,44 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     marginBottom: spacing.md
   },
+  logContent: {
+    flex: 1
+  },
+  logDate: {
+    color: colors.berry,
+    fontSize: 14,
+    fontWeight: "900",
+    width: 58
+  },
+  logMeta: {
+    color: colors.inkMuted,
+    fontSize: 13,
+    fontWeight: "800",
+    textTransform: "capitalize"
+  },
+  logNote: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "700",
+    lineHeight: 21,
+    marginTop: 4
+  },
+  logRow: {
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingVertical: spacing.md
+  },
   safeArea: {
     backgroundColor: colors.canvas,
     flex: 1
+  },
+  sectionTitle: {
+    color: colors.ink,
+    fontSize: 20,
+    fontWeight: "900",
+    marginBottom: spacing.sm
   },
   subtitle: {
     color: colors.berry,
