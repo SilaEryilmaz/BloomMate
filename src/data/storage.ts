@@ -6,8 +6,14 @@ import { Cycle, DailyLog, FlowLevel, TrackerData, TrackerSettings } from "../typ
 let database: SQLite.SQLiteDatabase | null = null;
 
 export const DEFAULT_SETTINGS: TrackerSettings = {
+  displayName: "",
+  recentFactIds: [],
+  notificationIds: [],
   periodLength: 5,
   cycleLength: 28,
+  notificationHour: 9,
+  notificationMinute: 0,
+  notificationsEnabled: false,
   onboardingComplete: false
 };
 
@@ -51,10 +57,21 @@ export const loadTrackerData = async (): Promise<TrackerData> => {
   );
   const rawSettings = await db.getAllAsync<{ key: keyof TrackerSettings; value: string }>("SELECT * FROM settings");
   const settings = rawSettings.reduce<TrackerSettings>(
-    (current, item) => ({
-      ...current,
-      [item.key]: item.key === "onboardingComplete" ? item.value === "true" : Number(item.value)
-    }),
+    (current, item) => {
+      if (item.key === "onboardingComplete" || item.key === "notificationsEnabled") {
+        return { ...current, [item.key]: item.value === "true" };
+      }
+
+      if (item.key === "displayName") {
+        return { ...current, displayName: item.value };
+      }
+
+      if (item.key === "recentFactIds" || item.key === "notificationIds") {
+        return { ...current, [item.key]: JSON.parse(item.value) };
+      }
+
+      return { ...current, [item.key]: Number(item.value) };
+    },
     DEFAULT_SETTINGS
   );
 
@@ -72,14 +89,27 @@ export const loadTrackerData = async (): Promise<TrackerData> => {
 
 export const saveSettings = async (settings: TrackerSettings) => {
   const db = await getDatabase();
-  await db.runAsync(
-    `INSERT INTO settings (key, value)
-     VALUES ('periodLength', ?), ('cycleLength', ?), ('onboardingComplete', ?)
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-    String(settings.periodLength),
-    String(settings.cycleLength),
-    String(settings.onboardingComplete)
-  );
+  const entries: [keyof TrackerSettings, string][] = [
+    ["displayName", settings.displayName],
+    ["recentFactIds", JSON.stringify(settings.recentFactIds)],
+    ["notificationIds", JSON.stringify(settings.notificationIds)],
+    ["periodLength", String(settings.periodLength)],
+    ["cycleLength", String(settings.cycleLength)],
+    ["notificationHour", String(settings.notificationHour)],
+    ["notificationMinute", String(settings.notificationMinute)],
+    ["notificationsEnabled", String(settings.notificationsEnabled)],
+    ["onboardingComplete", String(settings.onboardingComplete)]
+  ];
+
+  for (const [key, value] of entries) {
+    await db.runAsync(
+      `INSERT INTO settings (key, value)
+       VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      key,
+      value
+    );
+  }
 };
 
 export const saveOnboarding = async (settings: TrackerSettings, lastPeriodStart: string) => {

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Bloom",
+    "name": "BloomMate",
     "slug": "period-tracker",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,6 +8,10 @@
     "scheme": "bloomtracker",
     "assetBundlePatterns": [
       "**/*"
+    ],
+    "plugins": [
+      "expo-notifications",
+      "expo-font"
     ],
     "ios": {
       "supportsTablet": true

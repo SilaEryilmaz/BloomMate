@@ -14,8 +14,14 @@ export type DailyLog = {
 };
 
 export type TrackerSettings = {
+  displayName: string;
+  recentFactIds: string[];
+  notificationIds: string[];
   periodLength: number;
   cycleLength: number;
+  notificationHour: number;
+  notificationMinute: number;
+  notificationsEnabled: boolean;
   onboardingComplete: boolean;
 };
 

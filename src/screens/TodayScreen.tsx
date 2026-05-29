@@ -1,45 +1,27 @@
 import { addDays, differenceInCalendarDays, format, startOfWeek, parseISO } from "date-fns";
-import { useEffect, useMemo, useState } from "react";
-import { Keyboard, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useMemo } from "react";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { Card } from "../components/Card";
-import { FlowSelector } from "../components/FlowSelector";
 import { PrimaryButton } from "../components/PrimaryButton";
-import { SymptomChips } from "../components/SymptomChips";
 import { TopBar } from "../components/TopBar";
-import { endPeriod, startPeriod, upsertDailyLog } from "../data/storage";
+import { endPeriod, startPeriod } from "../data/storage";
 import { colors, spacing } from "../theme";
-import { FlowLevel, ScreenProps } from "../types";
+import { ScreenProps } from "../types";
 import { formatFriendlyDate, getCycleDay, getLogForDate, getNextPeriodStart, todayKey } from "../utils/cycle";
 
-export function TodayScreen({ data, refreshData }: ScreenProps) {
+type Props = ScreenProps & {
+  openMenu: () => void;
+};
+
+export function TodayScreen({ data, refreshData, openMenu }: Props) {
   const today = todayKey();
   const todaysLog = useMemo(() => getLogForDate(data.logs, today), [data.logs, today]);
-  const [flow, setFlow] = useState<FlowLevel>(todaysLog?.flow ?? "none");
-  const [symptoms, setSymptoms] = useState<string[]>(todaysLog?.symptoms ?? []);
-  const [notes, setNotes] = useState(todaysLog?.notes ?? "");
-  const [saved, setSaved] = useState(false);
-
   const cycleDay = getCycleDay(data.cycles);
   const nextPeriod = getNextPeriodStart(data.cycles, data.settings);
   const daysUntilPeriod = nextPeriod ? Math.max(0, differenceInCalendarDays(parseISO(nextPeriod), new Date())) : null;
   const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
   const weekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
-
-  useEffect(() => {
-    setFlow(todaysLog?.flow ?? "none");
-    setSymptoms(todaysLog?.symptoms ?? []);
-    setNotes(todaysLog?.notes ?? "");
-  }, [todaysLog]);
-
-  const saveLog = async () => {
-    await upsertDailyLog(today, flow, symptoms, notes);
-    await refreshData();
-    Keyboard.dismiss();
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2200);
-  };
 
   const handleStart = async () => {
     await startPeriod(today);
@@ -54,7 +36,7 @@ export function TodayScreen({ data, refreshData }: ScreenProps) {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content}>
-        <TopBar />
+        <TopBar onMenuPress={openMenu} />
 
         <Text style={styles.greeting}>Good Morning!</Text>
 
@@ -93,11 +75,11 @@ export function TodayScreen({ data, refreshData }: ScreenProps) {
           </View>
           <View style={styles.insightCardSoft}>
             <Text style={styles.insightLabelDark}>Symptoms</Text>
-            <Text style={styles.insightNumberDark}>{symptoms.length}</Text>
+            <Text style={styles.insightNumberDark}>{todaysLog?.symptoms.length ?? 0}</Text>
           </View>
           <View style={[styles.insightCard, styles.insightGold]}>
             <Text style={styles.insightLabel}>Flow</Text>
-            <Text style={styles.insightNumber}>{flow}</Text>
+            <Text style={styles.insightNumber}>{todaysLog?.flow ?? "none"}</Text>
           </View>
         </View>
 
@@ -106,25 +88,6 @@ export function TodayScreen({ data, refreshData }: ScreenProps) {
           <PrimaryButton label="End period" onPress={handleEnd} variant="soft" style={styles.rowButton} />
         </View>
 
-        <Card>
-          <Text style={styles.sectionTitle}>Today's log</Text>
-          <Text style={styles.fieldLabel}>Flow</Text>
-          <FlowSelector value={flow} onChange={setFlow} />
-          <Text style={styles.fieldLabel}>Symptoms and mood</Text>
-          <SymptomChips selected={symptoms} onChange={setSymptoms} />
-          <Text style={styles.fieldLabel}>Notes</Text>
-          <TextInput
-            multiline
-            onChangeText={setNotes}
-            onFocus={() => setSaved(false)}
-            placeholder="Anything worth remembering?"
-            placeholderTextColor={colors.inkMuted}
-            style={styles.notes}
-            value={notes}
-          />
-          {saved ? <Text style={styles.savedText}>Saved to your calendar for today.</Text> : null}
-          <PrimaryButton label={saved ? "Saved" : "Save today's log"} onPress={saveLog} />
-        </Card>
       </ScrollView>
     </SafeAreaView>
   );
@@ -194,13 +157,6 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     paddingBottom: 112
   },
-  fieldLabel: {
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: "900",
-    marginBottom: spacing.sm,
-    marginTop: spacing.md
-  },
   greeting: {
     color: colors.ink,
     fontSize: 20,
@@ -217,36 +173,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginTop: spacing.xs
   },
-  notes: {
-    backgroundColor: colors.canvas,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
-    color: colors.ink,
-    fontSize: 15,
-    minHeight: 92,
-    padding: spacing.md,
-    textAlignVertical: "top"
-  },
   rowButton: {
     flex: 1
   },
   safeArea: {
     backgroundColor: colors.canvas,
     flex: 1
-  },
-  sectionTitle: {
-    color: colors.ink,
-    fontSize: 22,
-    fontWeight: "900"
-  },
-  savedText: {
-    color: colors.berry,
-    fontSize: 14,
-    fontWeight: "900",
-    marginBottom: spacing.sm,
-    marginTop: spacing.sm,
-    textAlign: "center"
   },
   insightBlue: {
     backgroundColor: colors.sky

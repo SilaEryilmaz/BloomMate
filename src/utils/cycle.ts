@@ -93,4 +93,25 @@ export const getPredictedDateKeys = (cycles: Cycle[], settings?: TrackerSettings
   return keys;
 };
 
+export const getFertilityDateKeys = (cycles: Cycle[], settings?: TrackerSettings) => {
+  const nextStart = getNextPeriodStart(cycles, settings);
+  const keys = new Set<string>();
+
+  if (!nextStart) {
+    return { fertileDates: keys, ovulationDate: null as string | null };
+  }
+
+  const ovulation = addDays(parseISO(nextStart), -14);
+  const fertileStart = addDays(ovulation, -5);
+
+  eachDayOfInterval({ start: fertileStart, end: ovulation }).forEach((date) => {
+    keys.add(format(date, "yyyy-MM-dd"));
+  });
+
+  return {
+    fertileDates: keys,
+    ovulationDate: format(ovulation, "yyyy-MM-dd")
+  };
+};
+
 export const getLogForDate = (logs: DailyLog[], date: string) => logs.find((log) => log.date === date);

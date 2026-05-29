@@ -1,5 +1,5 @@
 import { addDays, endOfMonth, endOfWeek, format, isSameMonth, startOfMonth, startOfWeek } from "date-fns";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { colors, radii, spacing } from "../theme";
 import { DailyLog } from "../types";
@@ -8,12 +8,15 @@ type Props = {
   month: Date;
   periodDates: Set<string>;
   predictedDates: Set<string>;
+  fertileDates: Set<string>;
+  ovulationDate: string | null;
   logs: DailyLog[];
+  onSelectDate: (date: string) => void;
 };
 
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 
-export function CalendarGrid({ month, periodDates, predictedDates, logs }: Props) {
+export function CalendarGrid({ month, periodDates, predictedDates, fertileDates, ovulationDate, logs, onSelectDate }: Props) {
   const start = startOfWeek(startOfMonth(month));
   const end = endOfWeek(endOfMonth(month));
   const days: Date[] = [];
@@ -39,14 +42,28 @@ export function CalendarGrid({ month, periodDates, predictedDates, logs }: Props
           const hasLog = logs.some((log) => log.date === key && (log.symptoms.length > 0 || log.flow !== "none" || log.notes.trim().length > 0));
           const isPeriod = periodDates.has(key);
           const isPredicted = predictedDates.has(key);
+          const isFertile = fertileDates.has(key);
+          const isOvulation = ovulationDate === key;
           const muted = !isSameMonth(day, month);
 
           return (
-            <View key={key} style={[styles.day, isPeriod && styles.period, isPredicted && styles.predicted, muted && styles.muted]}>
+            <Pressable
+              key={key}
+              onPress={() => onSelectDate(key)}
+              style={[
+                styles.day,
+                isFertile && styles.fertile,
+                isOvulation && styles.ovulation,
+                isPeriod && styles.period,
+                isPredicted && styles.predicted,
+                muted && styles.muted
+              ]}
+            >
               <Text style={[styles.dayText, isPeriod && styles.periodText, muted && styles.mutedText]}>{format(day, "d")}</Text>
               {isPredicted && !isPeriod ? <Text style={styles.predictedMark}>~</Text> : null}
+              {isOvulation && !isPeriod ? <Text style={styles.ovulationMark}>*</Text> : null}
               {hasLog ? <View style={[styles.dot, isPeriod && styles.lightDot]} /> : null}
-            </View>
+            </Pressable>
           );
         })}
       </View>
@@ -85,6 +102,10 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     justifyContent: "space-between"
   },
+  fertile: {
+    backgroundColor: "#E7F4FB",
+    borderColor: "#9FD2EE"
+  },
   lightDot: {
     backgroundColor: colors.surface
   },
@@ -111,6 +132,18 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 8,
     top: 5
+  },
+  ovulation: {
+    backgroundColor: "#BFE4FA",
+    borderColor: colors.sky
+  },
+  ovulationMark: {
+    color: colors.berry,
+    fontSize: 14,
+    fontWeight: "900",
+    position: "absolute",
+    right: 7,
+    top: 4
   },
   weekHeader: {
     flexDirection: "row",

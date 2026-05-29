@@ -12,7 +12,7 @@ import { ScreenProps } from "../types";
 export function SettingsScreen({ data, refreshData }: ScreenProps) {
   const exportData = async () => {
     await Share.share({
-      title: "Bloom cycle data",
+      title: "BloomMate cycle data",
       message: JSON.stringify(data, null, 2)
     });
   };
@@ -38,7 +38,7 @@ export function SettingsScreen({ data, refreshData }: ScreenProps) {
 
         <View style={styles.profileHeader}>
           <Image source={require("../../assets/bloom-mascot.png")} style={styles.avatar} />
-          <Text style={styles.name}>Bloom Profile</Text>
+          <Text style={styles.name}>BloomMate Profile</Text>
           <Text style={styles.goal}>Goal: Cycle tracking</Text>
         </View>
 
@@ -70,7 +70,7 @@ export function SettingsScreen({ data, refreshData }: ScreenProps) {
         </Card>
 
         <Card>
-          <Text style={styles.copy}>Your data stays on this phone in Bloom v1. There is no account, cloud sync, or tracking server.</Text>
+          <Text style={styles.copy}>Your data stays on this phone in BloomMate v1. There is no account, cloud sync, or tracking server.</Text>
           <PrimaryButton label="Export my data" onPress={exportData} variant="soft" />
         </Card>
       </ScrollView>

@@ -1,6 +1,6 @@
-import { addMonths, format, isSameMonth, parseISO } from "date-fns";
+import { addMonths, format, parseISO } from "date-fns";
 import { useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { CalendarGrid } from "../components/CalendarGrid";
@@ -9,26 +9,48 @@ import { PrimaryButton } from "../components/PrimaryButton";
 import { TopBar } from "../components/TopBar";
 import { colors, spacing } from "../theme";
 import { ScreenProps } from "../types";
-import { formatFriendlyDate, getNextPeriodStart, getPeriodDateKeys, getPredictedDateKeys } from "../utils/cycle";
+import { formatFriendlyDate, getFertilityDateKeys, getLogForDate, getNextPeriodStart, getPeriodDateKeys, getPredictedDateKeys } from "../utils/cycle";
 
-export function CalendarScreen({ data }: ScreenProps) {
+type Props = ScreenProps & {
+  openMenu: () => void;
+  openLogDate: (date: string) => void;
+};
+
+export function CalendarScreen({ data, openMenu, openLogDate }: Props) {
   const [month, setMonth] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const periodDates = useMemo(() => getPeriodDateKeys(data.cycles, data.settings), [data.cycles, data.settings]);
   const predictedDates = useMemo(() => getPredictedDateKeys(data.cycles, data.settings), [data.cycles, data.settings]);
-  const monthLogs = useMemo(
-    () => data.logs.filter((log) => isSameMonth(parseISO(log.date), month) && (log.flow !== "none" || log.symptoms.length > 0 || log.notes.trim().length > 0)),
-    [data.logs, month]
-  );
+  const fertility = useMemo(() => getFertilityDateKeys(data.cycles, data.settings), [data.cycles, data.settings]);
   const nextPeriod = getNextPeriodStart(data.cycles, data.settings);
+  const selectedLog = selectedDate ? getLogForDate(data.logs, selectedDate) : null;
+  const selectedHasLog = Boolean(selectedLog && (selectedLog.flow !== "none" || selectedLog.symptoms.length > 0 || selectedLog.notes.trim().length > 0));
+  const selectedStatuses = selectedDate
+    ? [
+        periodDates.has(selectedDate) ? "Logged period" : null,
+        predictedDates.has(selectedDate) ? "Predicted period" : null,
+        fertility.fertileDates.has(selectedDate) ? "Fertile window" : null,
+        fertility.ovulationDate === selectedDate ? "Ovulation estimate" : null
+      ].filter(Boolean)
+    : [];
+
+  const openSelectedLog = () => {
+    if (!selectedDate) {
+      return;
+    }
+
+    setSelectedDate(null);
+    openLogDate(selectedDate);
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content}>
-        <TopBar title="Calendar" showBack />
+        <TopBar title="Calendar" showBack onMenuPress={openMenu} />
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>Cycle calendar</Text>
-            <Text style={styles.subtitle}>{nextPeriod ? `Next bloom: ${formatFriendlyDate(nextPeriod)}` : "Predictions will appear after setup."}</Text>
+            <Text style={styles.subtitle}>{nextPeriod ? `Next period: ${formatFriendlyDate(nextPeriod)}` : "Predictions will appear after setup."}</Text>
           </View>
         </View>
         <Card style={styles.calendarCard}>
@@ -37,33 +59,67 @@ export function CalendarScreen({ data }: ScreenProps) {
             <Text style={styles.month}>{format(month, "MMMM yyyy")}</Text>
             <PrimaryButton label=">" variant="outline" onPress={() => setMonth(addMonths(month, 1))} style={styles.monthButton} />
           </View>
-          <CalendarGrid month={month} periodDates={periodDates} predictedDates={predictedDates} logs={data.logs} />
+          <CalendarGrid
+            month={month}
+            periodDates={periodDates}
+            predictedDates={predictedDates}
+            fertileDates={fertility.fertileDates}
+            ovulationDate={fertility.ovulationDate}
+            logs={data.logs}
+            onSelectDate={setSelectedDate}
+          />
         </Card>
         <Card style={styles.legendCard}>
           <Legend color={colors.coral} label="Logged period" />
           <Legend color={colors.butter} label="Prediction" />
+          <Legend color="#E7F4FB" label="Fertile window" />
+          <Legend color={colors.sky} label="Ovulation estimate" />
           <Legend color={colors.berry} label="Daily log" />
         </Card>
-        <Card>
-          <Text style={styles.sectionTitle}>Logs this month</Text>
-          {monthLogs.length === 0 ? (
-            <Text style={styles.emptyText}>Saved notes, symptoms, and flow will appear here.</Text>
-          ) : (
-            monthLogs.map((log) => (
-              <View key={log.date} style={styles.logRow}>
-                <Text style={styles.logDate}>{format(parseISO(log.date), "MMM d")}</Text>
-                <View style={styles.logContent}>
-                  <Text style={styles.logMeta}>
-                    {log.flow !== "none" ? `${log.flow} flow` : "Daily note"}
-                    {log.symptoms.length > 0 ? ` · ${log.symptoms.join(", ")}` : ""}
-                  </Text>
-                  {log.notes.trim().length > 0 ? <Text style={styles.logNote}>{log.notes}</Text> : null}
-                </View>
-              </View>
-            ))
-          )}
+        <Card style={styles.fertilityCard}>
+          <Text style={styles.sectionTitle}>Fertility estimate</Text>
+          <Text style={styles.emptyText}>
+            BloomMate estimates ovulation around {fertility.ovulationDate ? formatFriendlyDate(fertility.ovulationDate) : "your next cycle"} and marks the fertile
+            window around it. This is a prediction, not medical advice.
+          </Text>
         </Card>
       </ScrollView>
+      <Modal animationType="fade" transparent visible={selectedDate !== null} onRequestClose={() => setSelectedDate(null)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalDate}>{selectedDate ? format(parseISO(selectedDate), "MMMM d, yyyy") : ""}</Text>
+            {selectedStatuses.length > 0 ? (
+              <View style={styles.statusWrap}>
+                {selectedStatuses.map((status) => (
+                  <Text key={status} style={styles.statusPill}>
+                    {status}
+                  </Text>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.emptyText}>No cycle markers for this date.</Text>
+            )}
+
+            <View style={styles.modalSection}>
+              <Text style={styles.sectionTitle}>Log details</Text>
+              {selectedHasLog && selectedLog ? (
+                <>
+                  <Text style={styles.logMeta}>{selectedLog.flow !== "none" ? `${selectedLog.flow} flow` : "Daily note"}</Text>
+                  {selectedLog.symptoms.length > 0 ? <Text style={styles.logNote}>{selectedLog.symptoms.join(", ")}</Text> : null}
+                  {selectedLog.notes.trim().length > 0 ? <Text style={styles.logNote}>{selectedLog.notes}</Text> : null}
+                </>
+              ) : (
+                <Text style={styles.emptyText}>No flow, symptoms, or notes saved yet.</Text>
+              )}
+            </View>
+
+            <View style={styles.modalActions}>
+              <PrimaryButton label="Close" onPress={() => setSelectedDate(null)} variant="outline" style={styles.modalButton} />
+              <PrimaryButton label={selectedHasLog ? "Edit log" : "Add log"} onPress={openSelectedLog} style={styles.modalButton} />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -92,6 +148,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between"
+  },
+  fertilityCard: {
+    backgroundColor: "#F5FBFF"
   },
   emptyText: {
     color: colors.inkMuted,
@@ -132,15 +191,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     marginBottom: spacing.md
   },
-  logContent: {
-    flex: 1
-  },
-  logDate: {
-    color: colors.berry,
-    fontSize: 14,
-    fontWeight: "900",
-    width: 58
-  },
   logMeta: {
     color: colors.inkMuted,
     fontSize: 13,
@@ -154,12 +204,39 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     marginTop: 4
   },
-  logRow: {
-    borderTopColor: colors.line,
-    borderTopWidth: 1,
+  modalActions: {
     flexDirection: "row",
     gap: spacing.sm,
-    paddingVertical: spacing.md
+    marginTop: spacing.lg
+  },
+  modalBackdrop: {
+    alignItems: "center",
+    backgroundColor: "rgba(45, 34, 48, 0.35)",
+    flex: 1,
+    justifyContent: "center",
+    padding: spacing.lg
+  },
+  modalButton: {
+    flex: 1
+  },
+  modalCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 22,
+    padding: spacing.lg,
+    width: "100%"
+  },
+  modalDate: {
+    color: colors.ink,
+    fontSize: 24,
+    fontWeight: "900",
+    marginBottom: spacing.md,
+    textAlign: "center"
+  },
+  modalSection: {
+    backgroundColor: colors.canvas,
+    borderRadius: 14,
+    marginTop: spacing.md,
+    padding: spacing.md
   },
   safeArea: {
     backgroundColor: colors.canvas,
@@ -170,6 +247,22 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "900",
     marginBottom: spacing.sm
+  },
+  statusPill: {
+    backgroundColor: "#F5F2EF",
+    borderRadius: 999,
+    color: colors.berry,
+    fontSize: 12,
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  statusWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    justifyContent: "center"
   },
   subtitle: {
     color: colors.berry,
