@@ -85,10 +85,16 @@ export const getPredictedDateKeys = (cycles: Cycle[], settings?: TrackerSettings
     return keys;
   }
 
-  eachDayOfInterval({
-    start: parseISO(nextStart),
-    end: addDays(parseISO(nextStart), getAveragePeriodLength(cycles, settings) - 1)
-  }).forEach((date) => keys.add(format(date, "yyyy-MM-dd")));
+  const cycleLength = getAverageCycleLength(cycles, settings);
+  const periodLength = getAveragePeriodLength(cycles, settings);
+
+  for (let cycleOffset = 0; cycleOffset < 6; cycleOffset += 1) {
+    const predictedStart = addDays(parseISO(nextStart), cycleOffset * cycleLength);
+    eachDayOfInterval({
+      start: predictedStart,
+      end: addDays(predictedStart, periodLength - 1)
+    }).forEach((date) => keys.add(format(date, "yyyy-MM-dd")));
+  }
 
   return keys;
 };
@@ -111,6 +117,65 @@ export const getFertilityDateKeys = (cycles: Cycle[], settings?: TrackerSettings
   return {
     fertileDates: keys,
     ovulationDate: format(ovulation, "yyyy-MM-dd")
+  };
+};
+
+export const getCyclePhaseDateKeys = (cycles: Cycle[], settings?: TrackerSettings) => {
+  const follicularDates = new Set<string>();
+  const lutealDates = new Set<string>();
+  const fertileDates = new Set<string>();
+  const ovulationDates = new Set<string>();
+  const menstrualDates = getPeriodDateKeys(cycles, settings);
+  const sorted = [...cycles].sort((a, b) => a.startDate.localeCompare(b.startDate));
+
+  const projected = [...sorted];
+  const latestNextStart = getNextPeriodStart(cycles, settings);
+  if (latestNextStart) {
+    const cycleLength = getAverageCycleLength(cycles, settings);
+    for (let cycleOffset = 0; cycleOffset < 6; cycleOffset += 1) {
+      const startDate = format(addDays(parseISO(latestNextStart), cycleOffset * cycleLength), "yyyy-MM-dd");
+      projected.push({ id: -cycleOffset - 1, startDate, endDate: null });
+    }
+  }
+
+  projected.forEach((cycle, index) => {
+    const nextCycleStart = projected[index + 1]?.startDate ?? null;
+    if (!nextCycleStart) {
+      return;
+    }
+
+    const periodEnd = cycle.endDate ?? format(addDays(parseISO(cycle.startDate), getAveragePeriodLength(cycles, settings) - 1), "yyyy-MM-dd");
+    const ovulation = addDays(parseISO(nextCycleStart), -14);
+    const fertileStart = addDays(ovulation, -5);
+    const follicularStart = addDays(parseISO(periodEnd), 1);
+    const follicularEnd = addDays(fertileStart, -1);
+    const lutealStart = addDays(ovulation, 1);
+    const lutealEnd = addDays(parseISO(nextCycleStart), -1);
+
+    if (!isAfter(follicularStart, follicularEnd)) {
+      eachDayOfInterval({ start: follicularStart, end: follicularEnd }).forEach((date) => {
+        follicularDates.add(format(date, "yyyy-MM-dd"));
+      });
+    }
+
+    eachDayOfInterval({ start: fertileStart, end: ovulation }).forEach((date) => {
+      fertileDates.add(format(date, "yyyy-MM-dd"));
+    });
+    ovulationDates.add(format(ovulation, "yyyy-MM-dd"));
+
+    if (!isAfter(lutealStart, lutealEnd)) {
+      eachDayOfInterval({ start: lutealStart, end: lutealEnd }).forEach((date) => {
+        lutealDates.add(format(date, "yyyy-MM-dd"));
+      });
+    }
+  });
+
+  return {
+    menstrualDates,
+    follicularDates,
+    fertileDates,
+    ovulationDates,
+    lutealDates
   };
 };
 

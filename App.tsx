@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { AnimatedEntrance } from "./src/components/AnimatedEntrance";
 import { CalendarScreen } from "./src/screens/CalendarScreen";
 import { HamburgerMenu } from "./src/components/HamburgerMenu";
 import { LogsScreen } from "./src/screens/LogsScreen";
@@ -17,8 +18,8 @@ import { OpeningScreen } from "./src/screens/OpeningScreen";
 import { DEFAULT_SETTINGS, initDatabase, loadTrackerData } from "./src/data/storage";
 import { mergeRecentFactIds, pickOpeningFacts } from "./src/content/openingFacts";
 import { saveSettings } from "./src/data/storage";
-import { TrackerData } from "./src/types";
-import { colors } from "./src/theme";
+import { ScreenProps, TrackerData } from "./src/types";
+import { colors, ThemeProvider, useTheme } from "./src/theme";
 import { configureNotifications, refreshBloomNotifications } from "./src/utils/notifications";
 
 export type RootTabParamList = {
@@ -36,7 +37,6 @@ export default function App() {
   const [openingComplete, setOpeningComplete] = useState(false);
   const [openingFacts, setOpeningFacts] = useState(() => pickOpeningFacts(DEFAULT_SETTINGS.recentFactIds));
   const [menuVisible, setMenuVisible] = useState(false);
-  const [menuView, setMenuView] = useState<"profile" | "settings">("profile");
 
   const refreshData = async () => {
     const nextData = await loadTrackerData();
@@ -45,42 +45,56 @@ export default function App() {
 
   useEffect(() => {
     const boot = async () => {
-      await initDatabase();
-      await configureNotifications();
-      const nextData = await loadTrackerData();
-      const selectedFacts = pickOpeningFacts(nextData.settings.recentFactIds);
-      const recentFactIds = mergeRecentFactIds(nextData.settings.recentFactIds, selectedFacts.map((fact) => fact.id));
-      let nextSettings = {
-        ...nextData.settings,
-        recentFactIds
-      };
+      try {
+        await initDatabase();
+        await configureNotifications();
+        const nextData = await loadTrackerData();
+        const selectedFacts = pickOpeningFacts(nextData.settings.recentFactIds);
+        const recentFactIds = mergeRecentFactIds(nextData.settings.recentFactIds, selectedFacts.map((fact) => fact.id));
+        let nextSettings = {
+          ...nextData.settings,
+          recentFactIds
+        };
 
-      if (nextSettings.onboardingComplete) {
-        nextSettings = await refreshBloomNotifications(nextSettings);
+        if (nextSettings.onboardingComplete) {
+          nextSettings = await refreshBloomNotifications(nextSettings);
+        }
+
+        setData({
+          ...nextData,
+          settings: nextSettings
+        });
+        setOpeningFacts(selectedFacts);
+        await saveSettings(nextSettings);
+      } catch (error) {
+        console.warn("BloomMate boot recovered with default settings", error);
+        setData({ cycles: [], logs: [], settings: DEFAULT_SETTINGS });
+        setOpeningFacts(pickOpeningFacts(DEFAULT_SETTINGS.recentFactIds));
+      } finally {
+        setReady(true);
       }
-
-      setData({
-        ...nextData,
-        settings: nextSettings
-      });
-      setOpeningFacts(selectedFacts);
-      await saveSettings(nextSettings);
-      setReady(true);
     };
 
     boot();
   }, []);
 
   const screenProps = useMemo(() => ({ data, refreshData }), [data]);
-  const openMenu = (view: "profile" | "settings" = "profile") => {
-    setMenuView(view);
+  const openMenu = () => {
     setMenuVisible(true);
+  };
+  const resetLocalAppState = () => {
+    setSelectedLogDate(null);
+    setMenuVisible(false);
+    setOpeningComplete(false);
+    setData({ cycles: [], logs: [], settings: DEFAULT_SETTINGS });
   };
 
   if (!ready) {
     return (
-      <View style={styles.loading}>
-        <ActivityIndicator color={colors.berry} size="large" />
+      <View style={[styles.loading, { backgroundColor: colors.canvas }]}>
+        <AnimatedEntrance>
+          <ActivityIndicator color={colors.berry} size="large" />
+        </AnimatedEntrance>
       </View>
     );
   }
@@ -88,8 +102,10 @@ export default function App() {
   if (!openingComplete) {
     return (
       <SafeAreaProvider>
-        <StatusBar style="dark" />
-        <OpeningScreen displayName={data.settings.displayName} facts={openingFacts} onComplete={() => setOpeningComplete(true)} />
+        <ThemeProvider preset={data.settings.themePreset}>
+          <StatusBar style="dark" />
+          <OpeningScreen displayName={data.settings.displayName} facts={openingFacts} onComplete={() => setOpeningComplete(true)} />
+        </ThemeProvider>
       </SafeAreaProvider>
     );
   }
@@ -97,25 +113,67 @@ export default function App() {
   return (
     <SafeAreaProvider>
       {!data.settings.onboardingComplete ? (
-        <>
+        <ThemeProvider preset={data.settings.themePreset}>
           <StatusBar style="dark" />
           <OnboardingScreen refreshData={refreshData} />
-        </>
+        </ThemeProvider>
       ) : (
+      <ThemeProvider preset={data.settings.themePreset}>
+        <ThemedTabs
+          data={data}
+          menuVisible={menuVisible}
+          openMenu={openMenu}
+          refreshData={refreshData}
+          screenProps={screenProps}
+          selectedLogDate={selectedLogDate}
+          setMenuVisible={setMenuVisible}
+          setSelectedLogDate={setSelectedLogDate}
+          onReset={resetLocalAppState}
+        />
+      </ThemeProvider>
+      )}
+    </SafeAreaProvider>
+  );
+}
+
+function ThemedTabs({
+  data,
+  menuVisible,
+  openMenu,
+  refreshData,
+  screenProps,
+  selectedLogDate,
+  setMenuVisible,
+  setSelectedLogDate,
+  onReset
+}: {
+  data: TrackerData;
+  menuVisible: boolean;
+  openMenu: () => void;
+  refreshData: () => Promise<void>;
+  screenProps: ScreenProps;
+  selectedLogDate: string | null;
+  setMenuVisible: (visible: boolean) => void;
+  setSelectedLogDate: (date: string | null) => void;
+  onReset: () => void;
+}) {
+  const theme = useTheme();
+
+  return (
       <NavigationContainer>
         <StatusBar style="dark" />
         <Tab.Navigator
           screenOptions={({ route }) => ({
             headerShown: false,
-            tabBarActiveTintColor: colors.berry,
-            tabBarInactiveTintColor: colors.inkMuted,
-            tabBarStyle: styles.tabBar,
+            tabBarActiveTintColor: theme.accent,
+            tabBarInactiveTintColor: theme.inkMuted,
+            tabBarStyle: [styles.tabBar, { backgroundColor: `${theme.petal}F5`, borderTopColor: theme.line }],
             tabBarLabelStyle: styles.tabLabel,
             tabBarIcon: ({ color, size }) => {
               const icons: Record<keyof RootTabParamList, keyof typeof Ionicons.glyphMap> = {
-                Home: "home",
+                Home: "home-outline",
                 Calendar: "calendar-outline",
-                Logs: "add-circle"
+                Logs: "document-text-outline"
               };
               return <Ionicons name={icons[route.name]} color={color} size={size} />;
             }
@@ -126,6 +184,7 @@ export default function App() {
             {({ navigation }) => (
               <CalendarScreen
                 {...screenProps}
+                onBackPress={() => navigation.navigate("Home")}
                 openMenu={openMenu}
                 openLogDate={(date) => {
                   setSelectedLogDate(date);
@@ -134,38 +193,42 @@ export default function App() {
               />
             )}
           </Tab.Screen>
-          <Tab.Screen name="Logs">{() => <LogsScreen {...screenProps} selectedDate={selectedLogDate} openMenu={openMenu} />}</Tab.Screen>
+          <Tab.Screen name="Logs">
+            {({ navigation }) => (
+              <LogsScreen
+                {...screenProps}
+                onBackPress={() => navigation.navigate("Home")}
+                selectedDate={selectedLogDate}
+                openMenu={openMenu}
+              />
+            )}
+          </Tab.Screen>
         </Tab.Navigator>
         <HamburgerMenu
           data={data}
-          initialView={menuView}
           onClose={() => setMenuVisible(false)}
+          onReset={onReset}
           refreshData={refreshData}
           visible={menuVisible}
         />
       </NavigationContainer>
-      )}
-    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
   loading: {
     alignItems: "center",
-    backgroundColor: colors.canvas,
     flex: 1,
     justifyContent: "center"
   },
   tabBar: {
-    backgroundColor: "#F7F1EC",
-    borderTopColor: colors.line,
     borderTopWidth: 1,
-    height: 82,
-    paddingBottom: 16,
-    paddingTop: 10
+    height: 76,
+    paddingBottom: 12,
+    paddingTop: 8
   },
   tabLabel: {
-    fontSize: 12,
-    fontWeight: "700"
+    fontSize: 10,
+    fontWeight: "900"
   }
 });

@@ -1,19 +1,25 @@
 import { Ionicons } from "@expo/vector-icons";
 import { format, isValid, parseISO, subDays } from "date-fns";
 import { useState } from "react";
-import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { AnimatedPressable } from "../components/AnimatedPressable";
+import { AnimatedStep } from "../components/AnimatedStep";
 import { Card } from "../components/Card";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { saveOnboarding } from "../data/storage";
 import { colors, radii, spacing } from "../theme";
 import { TrackerSettings } from "../types";
-import { formatNotificationTime, refreshBloomNotifications } from "../utils/notifications";
+import { refreshBloomNotifications } from "../utils/notifications";
 
 type Props = {
   refreshData: () => Promise<void>;
 };
+
+const HOURS = Array.from({ length: 12 }, (_, index) => index + 1);
+const MINUTES = Array.from({ length: 12 }, (_, index) => index * 5);
+const PERIODS = ["AM", "PM"] as const;
 
 export function OnboardingScreen({ refreshData }: Props) {
   const [step, setStep] = useState(0);
@@ -28,8 +34,6 @@ export function OnboardingScreen({ refreshData }: Props) {
 
   const isFinalStep = step === 5;
   const adjust = (value: number, amount: number, min: number, max: number) => Math.min(max, Math.max(min, value + amount));
-  const adjustHour = (amount: number) => setNotificationHour((value) => (value + amount + 24) % 24);
-  const adjustMinute = (amount: number) => setNotificationMinute((value) => (value + amount + 60) % 60);
 
   const submit = async () => {
     const parsedDate = parseISO(lastPeriodStart);
@@ -40,6 +44,7 @@ export function OnboardingScreen({ refreshData }: Props) {
 
     let nextSettings: TrackerSettings = {
       displayName: displayName.trim(),
+      avatarPreset: "initial",
       recentFactIds: [],
       notificationIds: [],
       periodLength,
@@ -47,6 +52,8 @@ export function OnboardingScreen({ refreshData }: Props) {
       notificationHour,
       notificationMinute,
       notificationsEnabled,
+      hydrationGoal: 8,
+      themePreset: "classicRose",
       onboardingComplete: true
     };
 
@@ -73,127 +80,134 @@ export function OnboardingScreen({ refreshData }: Props) {
         <View style={styles.shell}>
           <View style={styles.progressRow}>
             {[0, 1, 2, 3, 4, 5].map((item) => (
-              <View key={item} style={[styles.progressDot, item <= step && styles.progressDotActive]} />
+              <ProgressDot active={item <= step} current={item === step} key={item} />
             ))}
           </View>
 
           <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-            {step === 0 ? (
-              <View style={styles.hero}>
-                <Image source={require("../../assets/bloom-mascot.png")} style={styles.image} />
-                <Text style={styles.kicker}>Welcome to BloomMate</Text>
-                <Text style={styles.title}>Let's make your calendar feel personal.</Text>
-                <Text style={styles.copy}>A few quick questions help BloomMate start with a prediction that already feels close to you.</Text>
-              </View>
-            ) : null}
-
-            {step === 1 ? (
-              <Card style={styles.panel}>
-                <Text style={styles.stepTitle}>What should BloomMate call you?</Text>
-                <Text style={styles.inputLabel}>Your name</Text>
-                <TextInput
-                  autoCapitalize="words"
-                  onChangeText={setDisplayName}
-                  placeholder="Sila"
-                  placeholderTextColor={colors.inkMuted}
-                  style={styles.input}
-                  value={displayName}
-                />
-              </Card>
-            ) : null}
-
-            {step === 2 ? (
-              <Card style={styles.panel}>
-                <Text style={styles.stepTitle}>How long does your period usually last?</Text>
-                <Text style={styles.stepCopy}>This helps BloomMate shade the right number of days in your calendar.</Text>
-                <Stepper
-                  icon="water-outline"
-                  label="Usual period length"
-                  value={`${periodLength} days`}
-                  onMinus={() => setPeriodLength((value) => adjust(value, -1, 2, 10))}
-                  onPlus={() => setPeriodLength((value) => adjust(value, 1, 2, 10))}
-                />
-              </Card>
-            ) : null}
-
-            {step === 3 ? (
-              <Card style={styles.panel}>
-                <Text style={styles.stepTitle}>How long is your usual cycle?</Text>
-                <Stepper
-                  icon="repeat-outline"
-                  label="Usual cycle length"
-                  value={`${cycleLength} days`}
-                  onMinus={() => setCycleLength((value) => adjust(value, -1, 18, 45))}
-                  onPlus={() => setCycleLength((value) => adjust(value, 1, 18, 45))}
-                />
-              </Card>
-            ) : null}
-
-            {step === 4 ? (
-              <Card style={styles.panel}>
-                <Text style={styles.stepTitle}>When did your last period start?</Text>
-                <Text style={styles.stepCopy}>Use this to place your first cycle on the calendar.</Text>
-                <Text style={styles.inputLabel}>Last period started</Text>
-                <TextInput
-                  autoCapitalize="none"
-                  keyboardType="numbers-and-punctuation"
-                  onChangeText={(value) => {
-                    setError("");
-                    setLastPeriodStart(value);
-                  }}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={colors.inkMuted}
-                  style={styles.input}
-                  value={lastPeriodStart}
-                />
-                {error ? <Text style={styles.error}>{error}</Text> : null}
-              </Card>
-            ) : null}
-
-            {step === 5 ? (
-              <Card style={styles.panel}>
-                <Text style={styles.stepTitle}>Want a daily BloomMate note?</Text>
-                <Text style={styles.stepCopy}>BloomMate can send a small compliment or quote at your chosen time.</Text>
-                <View style={styles.choiceRow}>
-                  <Pressable
-                    onPress={() => setNotificationsEnabled(true)}
-                    style={[styles.choiceButton, notificationsEnabled && styles.choiceButtonActive]}
-                  >
-                    <Ionicons color={notificationsEnabled ? colors.surface : colors.berry} name="notifications-outline" size={22} />
-                    <Text style={[styles.choiceText, notificationsEnabled && styles.choiceTextActive]}>Enable</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => setNotificationsEnabled(false)}
-                    style={[styles.choiceButton, !notificationsEnabled && styles.choiceButtonActive]}
-                  >
-                    <Ionicons color={!notificationsEnabled ? colors.surface : colors.berry} name="moon-outline" size={22} />
-                    <Text style={[styles.choiceText, !notificationsEnabled && styles.choiceTextActive]}>Not now</Text>
-                  </Pressable>
+            <AnimatedStep step={step}>
+              {step === 0 ? (
+                <View style={styles.hero}>
+                  <Image source={require("../../assets/bloom-mascot.png")} style={styles.image} />
+                  <Text style={styles.kicker}>Welcome to BloomMate</Text>
+                  <Text style={styles.title}>Let's make your calendar feel personal.</Text>
+                  <Text style={styles.copy}>A few quick questions help BloomMate start with a prediction that already feels close to you.</Text>
                 </View>
+              ) : null}
 
-                {notificationsEnabled ? (
-                  <View style={styles.notificationPanel}>
-                    <Text style={styles.inputLabel}>Daily time</Text>
-                    <Text style={styles.timeValue}>{formatNotificationTime(notificationHour, notificationMinute)}</Text>
-                    <View style={styles.timeControls}>
-                      <PrimaryButton label="- hour" onPress={() => adjustHour(-1)} variant="outline" style={styles.timeButton} />
-                      <PrimaryButton label="+ hour" onPress={() => adjustHour(1)} variant="soft" style={styles.timeButton} />
-                    </View>
-                    <View style={styles.timeControls}>
-                      <PrimaryButton label="- 5 min" onPress={() => adjustMinute(-5)} variant="outline" style={styles.timeButton} />
-                      <PrimaryButton label="+ 5 min" onPress={() => adjustMinute(5)} variant="soft" style={styles.timeButton} />
-                    </View>
+              {step === 1 ? (
+                <Card style={styles.panel}>
+                  <Text style={styles.stepTitle}>What should BloomMate call you?</Text>
+                  <Text style={styles.inputLabel}>Your name</Text>
+                  <TextInput
+                    autoCapitalize="words"
+                    onChangeText={setDisplayName}
+                    placeholder=""
+                    placeholderTextColor={colors.inkMuted}
+                    style={styles.input}
+                    value={displayName}
+                  />
+                </Card>
+              ) : null}
+
+              {step === 2 ? (
+                <Card style={styles.panel}>
+                  <Text style={styles.stepTitle}>How long does your period usually last?</Text>
+                  <Text style={styles.stepCopy}>This helps BloomMate shade the right number of days in your calendar.</Text>
+                  <Stepper
+                    icon="water-outline"
+                    label="Usual period length"
+                    value={`${periodLength} days`}
+                    onMinus={() => setPeriodLength((value) => adjust(value, -1, 2, 10))}
+                    onPlus={() => setPeriodLength((value) => adjust(value, 1, 2, 10))}
+                  />
+                </Card>
+              ) : null}
+
+              {step === 3 ? (
+                <Card style={styles.panel}>
+                  <Text style={styles.stepTitle}>How long is your usual cycle?</Text>
+                  <Stepper
+                    icon="repeat-outline"
+                    label="Usual cycle length"
+                    value={`${cycleLength} days`}
+                    onMinus={() => setCycleLength((value) => adjust(value, -1, 18, 45))}
+                    onPlus={() => setCycleLength((value) => adjust(value, 1, 18, 45))}
+                  />
+                </Card>
+              ) : null}
+
+              {step === 4 ? (
+                <Card style={styles.panel}>
+                  <Text style={styles.stepTitle}>When did your last period start?</Text>
+                  <Text style={styles.stepCopy}>Use this to place your first cycle on the calendar.</Text>
+                  <Text style={styles.inputLabel}>Last period started</Text>
+                  <TextInput
+                    autoCapitalize="none"
+                    keyboardType="numbers-and-punctuation"
+                    onChangeText={(value) => {
+                      setError("");
+                      setLastPeriodStart(value);
+                    }}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor={colors.inkMuted}
+                    style={styles.input}
+                    value={lastPeriodStart}
+                  />
+                  {error ? <Text style={styles.error}>{error}</Text> : null}
+                </Card>
+              ) : null}
+
+              {step === 5 ? (
+                <Card style={styles.panel}>
+                  <Text style={styles.stepTitle}>Want a daily BloomMate note?</Text>
+                  <Text style={styles.stepCopy}>BloomMate can send a small compliment or quote at your chosen time.</Text>
+                  <View style={styles.choiceRow}>
+                    <AnimatedPressable
+                      onPress={() => setNotificationsEnabled(true)}
+                      style={[styles.choiceButton, notificationsEnabled && styles.choiceButtonActive]}
+                    >
+                      <Ionicons color={notificationsEnabled ? colors.surface : colors.berry} name="notifications-outline" size={22} />
+                      <Text style={[styles.choiceText, notificationsEnabled && styles.choiceTextActive]}>Enable</Text>
+                    </AnimatedPressable>
+                    <AnimatedPressable
+                      onPress={() => setNotificationsEnabled(false)}
+                      style={[styles.choiceButton, !notificationsEnabled && styles.choiceButtonActive]}
+                    >
+                      <Ionicons color={!notificationsEnabled ? colors.surface : colors.berry} name="moon-outline" size={22} />
+                      <Text style={[styles.choiceText, !notificationsEnabled && styles.choiceTextActive]}>Not now</Text>
+                    </AnimatedPressable>
                   </View>
-                ) : null}
-              </Card>
-            ) : null}
+
+                  {notificationsEnabled ? (
+                    <View style={styles.notificationPanel}>
+                      <View style={styles.preferredTimeRow}>
+                        <Text style={styles.inputLabel}>Preferred Time</Text>
+                        <View style={styles.preferredTimeValue}>
+                          <Text style={styles.preferredTimeText}>{formatCompactTime(notificationHour, notificationMinute)}</Text>
+                          <Ionicons name="time-outline" size={18} color={colors.ink} />
+                        </View>
+                      </View>
+                      <TimeWheelPicker
+                        hour={notificationHour}
+                        minute={notificationMinute}
+                        onChange={(hour, minute) => {
+                          setNotificationHour(hour);
+                          setNotificationMinute(minute);
+                        }}
+                      />
+                    </View>
+                  ) : null}
+                </Card>
+              ) : null}
+            </AnimatedStep>
           </ScrollView>
 
           <View style={styles.footer}>
             {step > 0 ? (
-              <Pressable onPress={() => setStep((value) => value - 1)} style={styles.backButton}>
+              <AnimatedPressable onPress={() => setStep((value) => value - 1)} style={styles.backButton}>
                 <Text style={styles.backLabel}>Back</Text>
-              </Pressable>
+              </AnimatedPressable>
             ) : (
               <View style={styles.backButton} />
             )}
@@ -203,6 +217,10 @@ export function OnboardingScreen({ refreshData }: Props) {
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
+}
+
+function ProgressDot({ active, current }: { active: boolean; current: boolean }) {
+  return <View style={[styles.progressDot, active && styles.progressDotActive, current && styles.progressDotCurrent]} />;
 }
 
 type StepperProps = {
@@ -231,6 +249,85 @@ function Stepper({ icon, label, value, onMinus, onPlus }: StepperProps) {
       </View>
     </View>
   );
+}
+
+function TimeWheelPicker({
+  hour,
+  minute,
+  onChange
+}: {
+  hour: number;
+  minute: number;
+  onChange: (hour: number, minute: number) => void;
+}) {
+  const display = toDisplayTime(hour);
+  const safeMinute = Math.min(55, Math.max(0, Math.round(minute / 5) * 5));
+
+  return (
+    <View style={styles.timeWheel}>
+      <TimeWheelColumn
+        items={HOURS.map((value) => ({ label: String(value), value }))}
+        onSelect={(nextHour) => onChange(toTwentyFourHour(nextHour, display.period), safeMinute)}
+        selectedValue={display.hour}
+      />
+      <TimeWheelColumn
+        items={MINUTES.map((value) => ({ label: value.toString().padStart(2, "0"), value }))}
+        onSelect={(nextMinute) => onChange(hour, nextMinute)}
+        selectedValue={safeMinute}
+      />
+      <TimeWheelColumn
+        items={PERIODS.map((value) => ({ label: value, value }))}
+        onSelect={(nextPeriod) => onChange(toTwentyFourHour(display.hour, nextPeriod), safeMinute)}
+        selectedValue={display.period}
+      />
+    </View>
+  );
+}
+
+function TimeWheelColumn<T extends number | string>({
+  items,
+  onSelect,
+  selectedValue
+}: {
+  items: { label: string; value: T }[];
+  onSelect: (value: T) => void;
+  selectedValue: T;
+}) {
+  return (
+    <ScrollView contentContainerStyle={styles.timeColumnContent} showsVerticalScrollIndicator={false} style={styles.timeColumn}>
+      {items.map((item) => {
+        const selected = item.value === selectedValue;
+        return (
+          <AnimatedPressable
+            key={String(item.value)}
+            onPress={() => onSelect(item.value)}
+            style={[styles.timeOption, selected && styles.timeOptionSelected]}
+          >
+            <Text style={[styles.timeOptionText, selected && styles.timeOptionTextSelected]}>{item.label}</Text>
+          </AnimatedPressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+function toDisplayTime(hour: number) {
+  return {
+    hour: hour % 12 === 0 ? 12 : hour % 12,
+    period: hour >= 12 ? ("PM" as const) : ("AM" as const)
+  };
+}
+
+function toTwentyFourHour(hour: number, period: "AM" | "PM") {
+  if (period === "AM") {
+    return hour === 12 ? 0 : hour;
+  }
+
+  return hour === 12 ? 12 : hour + 12;
+}
+
+function formatCompactTime(hour: number, minute: number) {
+  return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
 }
 
 const styles = StyleSheet.create({
@@ -360,6 +457,9 @@ const styles = StyleSheet.create({
   progressDotActive: {
     backgroundColor: colors.berry
   },
+  progressDotCurrent: {
+    opacity: 0.92
+  },
   progressRow: {
     flexDirection: "row",
     gap: spacing.xs,
@@ -418,18 +518,63 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     padding: spacing.md
   },
-  timeButton: {
-    flex: 1,
-    minHeight: 42
+  preferredTimeRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 44
   },
-  timeControls: {
+  preferredTimeText: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: "900"
+  },
+  preferredTimeValue: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: spacing.sm,
+    minHeight: 42,
+    paddingHorizontal: spacing.md
+  },
+  timeColumn: {
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
+    borderRadius: 16,
+    borderWidth: 1,
+    flex: 1,
+    maxHeight: 132
+  },
+  timeColumnContent: {
+    gap: spacing.xs,
+    padding: spacing.xs
+  },
+  timeOption: {
+    alignItems: "center",
+    borderColor: "transparent",
+    borderRadius: 12,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 40
+  },
+  timeOptionSelected: {
+    backgroundColor: colors.berry,
+    borderColor: colors.berry
+  },
+  timeOptionText: {
+    color: colors.inkMuted,
+    fontSize: 16,
+    fontWeight: "900"
+  },
+  timeOptionTextSelected: {
+    color: colors.surface
+  },
+  timeWheel: {
     flexDirection: "row",
     gap: spacing.sm
-  },
-  timeValue: {
-    color: colors.berry,
-    fontSize: 30,
-    fontWeight: "900"
   },
   title: {
     color: colors.ink,

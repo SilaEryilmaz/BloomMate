@@ -1,24 +1,42 @@
 import { addDays, endOfMonth, endOfWeek, format, isSameMonth, startOfMonth, startOfWeek } from "date-fns";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
-import { colors, radii, spacing } from "../theme";
+import { AnimatedPressable } from "./AnimatedPressable";
+import { colors, radii, spacing, useTheme } from "../theme";
 import { DailyLog } from "../types";
+import { todayKey } from "../utils/cycle";
 
 type Props = {
   month: Date;
   periodDates: Set<string>;
   predictedDates: Set<string>;
+  follicularDates: Set<string>;
   fertileDates: Set<string>;
   ovulationDate: string | null;
+  ovulationDates: Set<string>;
+  lutealDates: Set<string>;
   logs: DailyLog[];
   onSelectDate: (date: string) => void;
 };
 
-const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
+const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];
 
-export function CalendarGrid({ month, periodDates, predictedDates, fertileDates, ovulationDate, logs, onSelectDate }: Props) {
-  const start = startOfWeek(startOfMonth(month));
-  const end = endOfWeek(endOfMonth(month));
+export function CalendarGrid({
+  month,
+  periodDates,
+  predictedDates,
+  follicularDates,
+  fertileDates,
+  ovulationDate,
+  ovulationDates,
+  lutealDates,
+  logs,
+  onSelectDate
+}: Props) {
+  const theme = useTheme();
+  const start = startOfWeek(startOfMonth(month), { weekStartsOn: 1 });
+  const end = endOfWeek(endOfMonth(month), { weekStartsOn: 1 });
+  const today = todayKey();
   const days: Date[] = [];
   let cursor = start;
 
@@ -31,7 +49,7 @@ export function CalendarGrid({ month, periodDates, predictedDates, fertileDates,
     <View style={styles.wrapper}>
       <View style={styles.weekHeader}>
         {WEEKDAYS.map((day, index) => (
-          <Text key={`${day}-${index}`} style={styles.weekday}>
+          <Text key={`${day}-${index}`} style={[styles.weekday, { color: theme.inkSoft }]}>
             {day}
           </Text>
         ))}
@@ -42,28 +60,35 @@ export function CalendarGrid({ month, periodDates, predictedDates, fertileDates,
           const hasLog = logs.some((log) => log.date === key && (log.symptoms.length > 0 || log.flow !== "none" || log.notes.trim().length > 0));
           const isPeriod = periodDates.has(key);
           const isPredicted = predictedDates.has(key);
+          const isFollicular = follicularDates.has(key);
           const isFertile = fertileDates.has(key);
-          const isOvulation = ovulationDate === key;
+          const isOvulation = ovulationDate === key || ovulationDates.has(key);
+          const isLuteal = lutealDates.has(key);
+          const isToday = key === today;
           const muted = !isSameMonth(day, month);
 
           return (
-            <Pressable
+            <AnimatedPressable
               key={key}
               onPress={() => onSelectDate(key)}
               style={[
                 styles.day,
+                isFollicular && styles.follicular,
+                isLuteal && styles.luteal,
+                isPredicted && styles.predicted,
                 isFertile && styles.fertile,
                 isOvulation && styles.ovulation,
                 isPeriod && styles.period,
-                isPredicted && styles.predicted,
+                isToday && { borderColor: theme.ink, borderWidth: 2 },
                 muted && styles.muted
               ]}
             >
-              <Text style={[styles.dayText, isPeriod && styles.periodText, muted && styles.mutedText]}>{format(day, "d")}</Text>
-              {isPredicted && !isPeriod ? <Text style={styles.predictedMark}>~</Text> : null}
-              {isOvulation && !isPeriod ? <Text style={styles.ovulationMark}>*</Text> : null}
+              <Text style={[styles.dayText, { color: theme.ink }, isPeriod && styles.periodText, muted && { color: theme.inkMuted }]}>{format(day, "d")}</Text>
+              {isToday ? <View style={[styles.todaySpark, { backgroundColor: theme.ink }]} /> : null}
+              {isPredicted && !isPeriod ? <Text style={[styles.predictedMark, { color: theme.accent }]}>~</Text> : null}
+              {isOvulation && !isPeriod ? <Text style={[styles.ovulationMark, { color: theme.accent }]}>*</Text> : null}
               {hasLog ? <View style={[styles.dot, isPeriod && styles.lightDot]} /> : null}
-            </Pressable>
+            </AnimatedPressable>
           );
         })}
       </View>
@@ -75,12 +100,10 @@ const styles = StyleSheet.create({
   day: {
     alignItems: "center",
     aspectRatio: 1,
-    backgroundColor: colors.canvas,
-    borderColor: "#F8E8DF",
+    backgroundColor: "transparent",
     borderRadius: radii.md,
-    borderWidth: 1,
     justifyContent: "center",
-    marginBottom: 7,
+    marginBottom: 12,
     position: "relative",
     width: "13.15%"
   },
@@ -90,9 +113,9 @@ const styles = StyleSheet.create({
     fontWeight: "800"
   },
   dot: {
-    backgroundColor: colors.berry,
+    backgroundColor: colors.coral,
     borderRadius: 3,
-    bottom: 7,
+    bottom: 5,
     height: 6,
     position: "absolute",
     width: 6
@@ -103,8 +126,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between"
   },
   fertile: {
-    backgroundColor: "#E7F4FB",
-    borderColor: "#9FD2EE"
+    backgroundColor: "#C7DFA7"
+  },
+  follicular: {
+    backgroundColor: "#F3D481"
   },
   lightDot: {
     backgroundColor: colors.surface
@@ -115,15 +140,29 @@ const styles = StyleSheet.create({
   mutedText: {
     color: colors.inkMuted
   },
+  luteal: {
+    backgroundColor: "#E4B68E"
+  },
   period: {
-    backgroundColor: colors.coral
+    backgroundColor: "#CC766F",
+    shadowColor: colors.berry,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8
   },
   periodText: {
-    color: colors.surface
+    color: colors.ink
+  },
+  todaySpark: {
+    borderRadius: 2,
+    height: 4,
+    position: "absolute",
+    right: 7,
+    top: 7,
+    width: 4
   },
   predicted: {
-    backgroundColor: "#FFF0B8",
-    borderColor: "#F7D770"
+    backgroundColor: "#E8C2CF"
   },
   predictedMark: {
     color: colors.berry,
@@ -134,8 +173,7 @@ const styles = StyleSheet.create({
     top: 5
   },
   ovulation: {
-    backgroundColor: "#BFE4FA",
-    borderColor: colors.sky
+    backgroundColor: "#8DBE78"
   },
   ovulationMark: {
     color: colors.berry,
@@ -147,10 +185,10 @@ const styles = StyleSheet.create({
   },
   weekHeader: {
     flexDirection: "row",
-    marginBottom: spacing.sm
+    marginBottom: spacing.md
   },
   weekday: {
-    color: colors.inkMuted,
+    color: colors.inkSoft,
     fontSize: 13,
     fontWeight: "900",
     textAlign: "center",

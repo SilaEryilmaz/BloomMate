@@ -1,5 +1,9 @@
 export type FlowLevel = "none" | "light" | "medium" | "heavy";
 
+export type ThemePreset = "classicRose" | "deepOrchid" | "nordicSage";
+
+export type AvatarPreset = "initial" | "cat" | "dog" | "bunny" | "panda" | "moon" | "flower" | "sparkle" | "heart";
+
 export type Cycle = {
   id: number;
   startDate: string;
@@ -11,10 +15,12 @@ export type DailyLog = {
   flow: FlowLevel;
   symptoms: string[];
   notes: string;
+  waterCups: number;
 };
 
 export type TrackerSettings = {
   displayName: string;
+  avatarPreset: AvatarPreset;
   recentFactIds: string[];
   notificationIds: string[];
   periodLength: number;
@@ -22,6 +28,8 @@ export type TrackerSettings = {
   notificationHour: number;
   notificationMinute: number;
   notificationsEnabled: boolean;
+  hydrationGoal: number;
+  themePreset: ThemePreset;
   onboardingComplete: boolean;
 };
 
